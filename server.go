@@ -43,6 +43,7 @@ func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
 }
 
 func (s *server) start() error {
+	logger.Printf("Linko is running on http://localhost%s", s.httpServer.Addr)
 	ln, err := net.Listen("tcp", s.httpServer.Addr)
 	if err != nil {
 		return err
@@ -54,6 +55,7 @@ func (s *server) start() error {
 }
 
 func (s *server) shutdown(ctx context.Context) error {
+	logger.Println("Linko is shutting down")
 	return s.httpServer.Shutdown(ctx)
 }
 
