@@ -27,12 +27,22 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	st, err := store.New(dataDir)
+	accesLog, err := os.OpenFile("linko.access.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer func() {
+		if err := accesLog.Close(); err != nil {
+			log.Printf("error in closing file %w", err)
+		}
+	}()
+
+	infoLogger := log.New(os.Stdout, "INFO: ", log.LstdFlags)
+	standardLogger := log.New(os.Stdout, "DEBUG: ", log.LstdFlags)
+
+	st, err := store.New(dataDir, infoLogger)
 	if err != nil {
 		logger.Printf("failed to create store: %v", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel)
+	s := newServer(*st, httpPort, cancel, standardLogger)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
