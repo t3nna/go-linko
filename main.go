@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,8 +12,6 @@ import (
 
 	"boot.dev/linko/internal/store"
 )
-
-var logger = log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -28,21 +27,25 @@ func main() {
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 	accesLog, err := os.OpenFile("linko.access.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open the file: %v\n", err)
+	}
+
 	defer func() {
 		if err := accesLog.Close(); err != nil {
 			log.Printf("error in closing file %w", err)
 		}
 	}()
 
-	infoLogger := log.New(os.Stdout, "INFO: ", log.LstdFlags)
-	standardLogger := log.New(os.Stdout, "DEBUG: ", log.LstdFlags)
+	accessLogger := log.New(accesLog, "INFO: ", log.LstdFlags)
+	logger := log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
 
-	st, err := store.New(dataDir, infoLogger)
+	st, err := store.New(dataDir, logger)
 	if err != nil {
 		logger.Printf("failed to create store: %v", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel, standardLogger)
+	s := newServer(*st, httpPort, cancel, accessLogger)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
