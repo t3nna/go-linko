@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,10 +27,12 @@ func main() {
 	os.Exit(status)
 }
 
-func initLogger() (*log.Logger, func() error, error) {
+func initLogger() (*slog.Logger, func() error, error) {
 	fName, isLogFile := os.LookupEnv("LINKO_LOG_FILE")
 	if !isLogFile {
-		return log.New(os.Stderr, "", log.LstdFlags), func() error { return nil }, nil
+		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})),
+			func() error { return nil },
+			nil
 	}
 
 	logFile, err := os.OpenFile(fName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -43,7 +45,7 @@ func initLogger() (*log.Logger, func() error, error) {
 	bufFile := bufio.NewWriterSize(logFile, 1024)
 
 	mWriter := io.MultiWriter(os.Stderr, bufFile)
-	return log.New(mWriter, "", log.LstdFlags), func() error {
+	return slog.New(slog.NewTextHandler(mWriter, nil)), func() error {
 
 		if err := bufFile.Flush(); err != nil {
 			return err
@@ -69,7 +71,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		logger.Printf("failed to create store: %v", err)
+		logger.Info(fmt.Sprintf("failed to create store: %v", err))
 		return 1
 	}
 	s := newServer(*st, httpPort, cancel, logger)
