@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -25,27 +26,34 @@ func main() {
 	os.Exit(status)
 }
 
-func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	accesLog, err := os.OpenFile("linko.access.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open the file: %v\n", err)
+func initLogger() (*log.Logger, error) {
+	fName, isLogFile := os.LookupEnv("LINKO_LOG_FILE")
+	if !isLogFile {
+		return log.New(os.Stderr, "", log.LstdFlags), nil
 	}
 
-	defer func() {
-		if err := accesLog.Close(); err != nil {
-			log.Printf("error in closing file %w", err)
-		}
-	}()
+	accesLog, err := os.OpenFile(fName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
 
-	accessLogger := log.New(accesLog, "INFO: ", log.LstdFlags)
-	logger := log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
+	mWriter := io.MultiWriter(os.Stderr, accesLog)
+	return log.New(mWriter, "", log.LstdFlags), nil
+}
+
+func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
+	logger, err := initLogger()
+	if err != nil {
+		fmt.Errorf("err")
+		return 1
+	}
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
 		logger.Printf("failed to create store: %v", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel, accessLogger)
+	s := newServer(*st, httpPort, cancel, logger)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
