@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -26,23 +27,41 @@ func main() {
 	os.Exit(status)
 }
 
-func initLogger() (*log.Logger, error) {
+func initLogger() (*log.Logger, func() error, error) {
 	fName, isLogFile := os.LookupEnv("LINKO_LOG_FILE")
 	if !isLogFile {
-		return log.New(os.Stderr, "", log.LstdFlags), nil
+		return log.New(os.Stderr, "", log.LstdFlags), func() error { return nil }, nil
 	}
 
-	accesLog, err := os.OpenFile(fName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(fName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil, err
+		return nil, func() error {
+			return nil
+		}, err
 	}
 
-	mWriter := io.MultiWriter(os.Stderr, accesLog)
-	return log.New(mWriter, "", log.LstdFlags), nil
+	bufFile := bufio.NewWriterSize(logFile, 1024)
+
+	mWriter := io.MultiWriter(os.Stderr, bufFile)
+	return log.New(mWriter, "", log.LstdFlags), func() error {
+
+		if err := bufFile.Flush(); err != nil {
+			return err
+		}
+		return logFile.Close()
+
+	}, nil
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	logger, err := initLogger()
+	logger, closeLogger, err := initLogger()
+
+	defer func() {
+		if err := closeLogger(); err != nil {
+			fmt.Fprintf(os.Stderr, "error when closing logger %w", err)
+		}
+	}()
+
 	if err != nil {
 		fmt.Errorf("err")
 		return 1
